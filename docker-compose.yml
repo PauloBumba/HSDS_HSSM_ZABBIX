@@ -1,109 +1,128 @@
-    services:
-      mysql-server:
-        image: mysql:8.0.30
-        container_name: mysql-server
-        restart: always
-        environment:
-          MYSQL_DATABASE: zabbix
-          MYSQL_USER: zabbix
-          MYSQL_PASSWORD: zabbix
-          MYSQL_ROOT_PASSWORD: zabbix
-          TZ: America/Sao_Paulo
-        command:
-          --character-set-server=utf8mb4
-          --collation-server=utf8mb4_unicode_ci
-          --default-authentication-plugin=mysql_native_password
-          --log_bin_trust_function_creators=1
-        healthcheck:
-          test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-          interval: 5s
-          timeout: 5s
-          retries: 10
-        volumes:
-          - mysql_data:/var/lib/mysql
-        networks:
-          - zabbix-net
+version: '3.9'
 
-      zabbix-java-gateway:
-        image: zabbix/zabbix-java-gateway
-        container_name: zabbix-java-gateway
-        restart: unless-stopped
-        networks:
-          - zabbix-net
-
-      zabbix-server:
-        image: zabbix/zabbix-server-mysql
-        container_name: zabbix-server
-        depends_on:
-          mysql-server:
-            condition: service_healthy
-        restart: unless-stopped
-        ports:
-          - "10051:10051"
-        environment:
-          DB_SERVER_HOST: mysql-server
-          MYSQL_DATABASE: zabbix
-          MYSQL_USER: zabbix
-          MYSQL_PASSWORD: zabbix
-          ZBX_JAVAGATEWAY: zabbix-java-gateway
-        networks:
-          - zabbix-net
-
-      zabbix-agent:
-        image: zabbix/zabbix-agent
-        container_name: zabbix-agent
-        restart: unless-stopped
-        ports:
-          - "10050:10050"
-        environment:
-          ZBX_SERVER_HOST: zabbix-server
-          ZBX_HOSTNAME: "Zabbix server"
-        networks:
-          - zabbix-net
-
-      zabbix-web:
-        image: zabbix/zabbix-web-nginx-mysql
-        container_name: zabbix-web
-        restart: unless-stopped
-        depends_on:
-          mysql-server:
-            condition: service_healthy
-          zabbix-server:
-            condition: service_started
-        ports:
-          - "80:8080"
-        environment:
-          DB_SERVER_HOST: mysql-server
-          MYSQL_DATABASE: zabbix
-          MYSQL_USER: zabbix
-          MYSQL_PASSWORD: zabbix
-          PHP_TZ: America/Sao_Paulo
-          ZBX_SERVER_HOST: zabbix-server
-        networks:
-          - zabbix-net
-
-      portainer:
-        image: portainer/portainer-ce:2.9.3
-        container_name: portainer
-        restart: always
-        ports:
-          - "8000:8000"
-          - "9443:9443"
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
-          - portainer_data:/data
-        networks:
-          - zabbix-net
-
+services:
+  mysql-server:
+    image: mysql:8.0.30
+    container_name: mysql-server
+    restart: always
+    environment:
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      MYSQL_ROOT_PASSWORD: zabbix
+      TZ: America/Sao_Paulo
+    command:
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --log_bin_trust_function_creators=1
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
-      portainer_data:
-      mysql_data:
-
+      - mysql_data:/var/lib/mysql
     networks:
-      zabbix-net:
-        driver: bridge
-        driver_opts:
-          com.docker.network.bridge.name: zabbix-net
-        ipam:
-          config:
-             - subnet: 172.20.0.0/16
+      - zabbix-net
+
+  zabbix-java-gateway:
+    image: zabbix/zabbix-java-gateway
+    container_name: zabbix-java-gateway
+    restart: unless-stopped
+    networks:
+      - zabbix-net
+
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql
+    container_name: zabbix-server
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "10051:10051"
+    environment:
+      DB_SERVER_HOST: mysql-server
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      ZBX_JAVAGATEWAY: zabbix-java-gateway
+    networks:
+      - zabbix-net
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent
+    container_name: zabbix-agent
+    restart: unless-stopped
+    ports:
+      - "10050:10050"
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_HOSTNAME: "Zabbix server"
+    networks:
+      - zabbix-net
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql
+    container_name: zabbix-web
+    restart: unless-stopped
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+      zabbix-server:
+        condition: service_started
+    ports:
+      - "80:8080"
+    environment:
+      DB_SERVER_HOST: mysql-server
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      PHP_TZ: America/Sao_Paulo
+      ZBX_SERVER_HOST: zabbix-server
+    networks:
+      - zabbix-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      zabbix-web:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: alexanderzobnin-zabbix-app
+    networks:
+      - zabbix-net
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  portainer:
+    image: portainer/portainer-ce:2.9.3
+    container_name: portainer
+    restart: always
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - zabbix-net
+
+volumes:
+  portainer_data:
+  mysql_data:
+  grafana_data:
+
+networks:
+  zabbix-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: zabbix-net
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
